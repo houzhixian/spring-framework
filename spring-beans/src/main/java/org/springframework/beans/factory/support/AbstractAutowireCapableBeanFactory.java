@@ -558,6 +558,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	 * @see #instantiateBean
 	 * @see #instantiateUsingFactoryMethod
 	 * @see #autowireConstructor
+	 * @note 真正创建bean的方法
 	 */
 	protected Object doCreateBean(String beanName, RootBeanDefinition mbd, @Nullable Object[] args)
 			throws BeanCreationException {
@@ -592,6 +593,27 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 		// Eagerly cache singletons to be able to resolve circular references
 		// even when triggered by lifecycle interfaces like BeanFactoryAware.
+
+
+		/**
+		 * @question 三级缓存为什么要使用工厂而不是直接使用引用？换而言之，为什么需要这个三级缓存，直接通过二级缓存暴露一个引用不行吗？
+		 *
+		 * @answer 这个工厂的目的在于延迟对实例化阶段生成的对象的代理，只有真正发生循环依赖的时候，才去提前生成代理对象，
+		 * 否则只会创建一个工厂并将其放入到三级缓存中，但是不会去通过这个工厂去真正创建对象
+		 * @note A是单例的，mbd.isSingleton()条件满足
+		 * allowCircularReferences：这个变量代表是否允许循环依赖，默认是开启的，条件也满足
+		 * isSingletonCurrentlyInCreation：正在在创建A，也满足
+		 * 所以earlySingletonExposure=true
+		 * 即使没有循环依赖，也会将其添加到三级缓存中，而且是不得不添加到三级缓存中，因为到目前为止Spring也不能确定这个Bean有没有跟别的Bean出现循环依赖
+		 * 假设我们在这里直接使用二级缓存的话，那么意味着所有的Bean在这一步都要完成AOP代理。这样做有必要吗？
+		 *
+		 * 不仅没有必要，而且违背了Spring在结合AOP跟Bean的生命周期的设计！
+		 * Spring结合AOP跟Bean的生命周期本身就是通过AnnotationAwareAspectJAutoProxyCreator这个后置处理器来完成的，
+		 * 在这个后置处理的postProcessAfterInitialization方法中对初始化后的Bean完成AOP代理。
+		 * 如果出现了循环依赖，那没有办法，只有给Bean先创建代理，但是没有出现循环依赖的情况下，
+		 * 设计之初就是让Bean在生命周期的最后一步完成代理而不是在实例化后就立马完成代理
+ 		 */
+
 		boolean earlySingletonExposure = (mbd.isSingleton() && this.allowCircularReferences &&
 				isSingletonCurrentlyInCreation(beanName));
 		if (earlySingletonExposure) {
@@ -599,14 +621,23 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 				logger.trace("Eagerly caching bean '" + beanName +
 						"' to allow for resolving potential circular references");
 			}
+			/**
+			 * @note 添加到三级缓存
+			 */
 			addSingletonFactory(beanName, () -> getEarlyBeanReference(beanName, mbd, bean));
 		}
 
 		// Initialize the bean instance.
 		Object exposedObject = bean;
 		try {
+			/**
+			 * @note 三级缓存添加后再开始属性注入
+			 */
 			populateBean(beanName, mbd, instanceWrapper);
 			exposedObject = initializeBean(beanName, exposedObject, mbd);
+			/**
+			 * @note exposedObject 初始化后的对象
+			 */
 		}
 		catch (Throwable ex) {
 			if (ex instanceof BeanCreationException && beanName.equals(((BeanCreationException) ex).getBeanName())) {
@@ -619,9 +650,18 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		}
 
 		if (earlySingletonExposure) {
+			/**
+			 * @note 从二级缓存中获取到代理后的bean
+			 * 在完成初始化后，Spring又调用了一次 getSingleton方法，这一次传入的参数又不一样了，false可以理解为禁用三级缓存
+			 * 在为B中注入A时已经将三级缓存中的工厂取出，并从工厂中获取到了一个对象放入到了二级缓存中，
+			 * 所以这里的这个getSingleton方法做的时间就是从二级缓存中获取到这个代理后的A对象
+			 */
 			Object earlySingletonReference = getSingleton(beanName, false);
 			if (earlySingletonReference != null) {
 				if (exposedObject == bean) {
+					/**
+					 * @note 从二级缓存中获取到代理后的bean
+					 */
 					exposedObject = earlySingletonReference;
 				}
 				else if (!this.allowRawInjectionDespiteWrapping && hasDependentBean(beanName)) {
@@ -966,6 +1006,26 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	 * @param mbd the merged bean definition for the bean
 	 * @param bean the raw bean instance
 	 * @return the object to expose as bean reference
+	 *
+	 * @note 实际上就是调用了后置处理器的 getEarlyBeanReference ，而真正实现了这个方法的后置处理器只有一个，
+	 * 就是通过 @EnableAspectJAutoProxy 注解导入的 AnnotationAwareAspectJAutoProxyCreator
+	 * 也就是说如果在不考虑AOP的情况下，下面的代码等价于：
+	 * protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, Object bean) {
+	 *     Object exposedObject = bean;
+	 *     return exposedObject;
+	 * }
+	 * @question 在不考虑AOP的情况下三级缓存有用嘛？
+	 * @answer   在普通的循环依赖的情况下，三级缓存没有任何作用，三级缓存实际上跟Spring中的AOP相关
+	 * 如果在开启AOP的情况下，那么就是调用到 AnnotationAwareAspectJAutoProxyCreator 的 getEarlyBeanReference 方法
+	 *
+	 * @question 在给B注入的时候为什么要注入一个代理对象？
+	 * @answer   当我们对A进行了AOP代理时，说明我们希望从容器中获取到的就是A代理后的对象而不是A本身，
+	 * 因此把A当作依赖进行注入时也要注入它的代理对象
+	 *
+	 * @question 明明初始化的时候是A对象，那么Spring是在哪里将代理对象放入到容器中的呢？
+	 * @answer   当我们对A进行了AOP代理时，说明我们希望从容器中获取到的就是A代理后的对象而不是A本身，
+	 *
+	 *
 	 */
 	protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, Object bean) {
 		Object exposedObject = bean;
@@ -1763,6 +1823,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	 * @see #applyBeanPostProcessorsBeforeInitialization
 	 * @see #invokeInitMethods
 	 * @see #applyBeanPostProcessorsAfterInitialization
+	 * @note 真正初始化，执行aware接口中的方法，初始化方法，完成AOP代理
 	 */
 	protected Object initializeBean(String beanName, Object bean, @Nullable RootBeanDefinition mbd) {
 		if (System.getSecurityManager() != null) {
