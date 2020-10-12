@@ -559,6 +559,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	 * @see #instantiateUsingFactoryMethod
 	 * @see #autowireConstructor
 	 * @note 真正创建bean的方法
+	 *
+	 * @note getBean核心方法
 	 */
 	protected Object doCreateBean(String beanName, RootBeanDefinition mbd, @Nullable Object[] args)
 			throws BeanCreationException {
@@ -1315,6 +1317,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	 * {@link Supplier} callback.
 	 * @since 5.0
 	 * @see #obtainFromSupplier
+	 * @note getBean核心方法
 	 */
 	@Override
 	protected Object getObjectForBeanInstance(
