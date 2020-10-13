@@ -262,6 +262,9 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					logger.trace("Returning cached instance of singleton bean '" + beanName + "'");
 				}
 			}
+			/**
+			 * @note 进行后续的处理
+			 */
 			bean = getObjectForBeanInstance(sharedInstance, name, beanName, null);
 		}
 
@@ -326,8 +329,14 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				 * @note 开始创建bean的入口
 				 */
 				if (mbd.isSingleton()) {
+					/**
+					 * @note 再次获取 bean 实例
+					 */
 					sharedInstance = getSingleton(beanName, () -> {
 						try {
+							/**
+							 * @note 创建 bean 实例，createBean 返回的 bean 是完全实例化好的
+							 */
 							return createBean(beanName, mbd, args);
 						}
 						catch (BeansException ex) {
@@ -338,6 +347,9 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 							throw ex;
 						}
 					});
+					/**
+					 * @note 进行后续的处理
+					 */
 					bean = getObjectForBeanInstance(sharedInstance, name, beanName, mbd);
 				}
 

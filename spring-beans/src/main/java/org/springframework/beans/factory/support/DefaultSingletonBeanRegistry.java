@@ -133,10 +133,17 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 	 * <p>To be called for eager registration of singletons.
 	 * @param beanName the name of the bean
 	 * @param singletonObject the singleton object
+	 * @note getBean核心方法
 	 */
 	protected void addSingleton(String beanName, Object singletonObject) {
 		synchronized (this.singletonObjects) {
+			/**
+			 * @note 将 <beanName, singletonObject> 映射存入 singletonObjects 中
+			 */
 			this.singletonObjects.put(beanName, singletonObject);
+			/**
+			 * @note 从其他缓存中移除 beanName 相关映射
+			 */
 			this.singletonFactories.remove(beanName);
 			this.earlySingletonObjects.remove(beanName);
 			this.registeredSingletons.add(beanName);
@@ -228,6 +235,8 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 	 * @param singletonFactory the ObjectFactory to lazily create the singleton
 	 * with, if necessary
 	 * @return the registered singleton object
+	 *
+	 * @note getBean 核心方法
 	 */
 	public Object getSingleton(String beanName, ObjectFactory<?> singletonFactory) {
 		Assert.notNull(beanName, "Bean name must not be null");
@@ -248,6 +257,9 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 				if (recordSuppressedExceptions) {
 					this.suppressedExceptions = new LinkedHashSet<>();
 				}
+				/**
+				 * @note 调用 getObject 方法创建 bean 实例
+				 */
 				try {
 					singletonObject = singletonFactory.getObject();
 					newSingleton = true;
@@ -274,6 +286,9 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 					}
 					afterSingletonCreation(beanName);
 				}
+				/**
+				 * @note 添加 bean 到 singletonObjects 缓存中，并从其他集合中将 bean 相关记录移除
+				 */
 				if (newSingleton) {
 					addSingleton(beanName, singletonObject);
 				}
