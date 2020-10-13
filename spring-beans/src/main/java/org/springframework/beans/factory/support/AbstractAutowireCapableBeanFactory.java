@@ -561,6 +561,9 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	 * @note 真正创建bean的方法
 	 *
 	 * @note getBean核心方法
+	 * 1. 创建原始 bean 实例 → createBeanInstance(beanName, mbd, args)
+	 * 2. 添加原始对象工厂对象到 singletonFactories 缓存中 → addSingletonFactory(beanName, () -> getEarlyBeanReference(beanName, mbd, bean));
+	 * 3. 填充属性，解析依赖 → populateBean(beanName, mbd, instanceWrapper)
 	 */
 	protected Object doCreateBean(String beanName, RootBeanDefinition mbd, @Nullable Object[] args)
 			throws BeanCreationException {
@@ -621,8 +624,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		 * 如果出现了循环依赖，那没有办法，只有给Bean先创建代理，但是没有出现循环依赖的情况下，
 		 * 设计之初就是让Bean在生命周期的最后一步完成代理而不是在实例化后就立马完成代理
 		 *
-		 * earlySingletonExposure 用于表示是否”提前暴露“原始对象的引用，用于解决循环依赖。对于单例 bean，该变量一般为 true
-		 *
+		 * earlySingletonExposure 用于表示是否提前暴露原始对象的引用，用于解决循环依赖。对于单例 bean，该变量一般为 true
  		 */
 
 		boolean earlySingletonExposure = (mbd.isSingleton() && this.allowCircularReferences &&
@@ -648,7 +650,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		Object exposedObject = bean;
 		try {
 			/**
-			 * @note 三级缓存添加后再开始属性注入
+			 * @note 三级缓存添加后再开始属性注入 填充属性，解析依赖
 			 */
 			populateBean(beanName, mbd, instanceWrapper);
 			exposedObject = initializeBean(beanName, exposedObject, mbd);
