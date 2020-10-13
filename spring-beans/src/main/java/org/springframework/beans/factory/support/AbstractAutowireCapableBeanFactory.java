@@ -571,8 +571,14 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			instanceWrapper = this.factoryBeanInstanceCache.remove(beanName);
 		}
 		if (instanceWrapper == null) {
+			/**
+			 * @note 创建 bean 对象，并将 bean 对象包裹在 BeanWrapper 对象中返回
+			 */
 			instanceWrapper = createBeanInstance(beanName, mbd, args);
 		}
+		/**
+		 * @note 从 BeanWrapper 对象中获取 bean 对象，这里的 bean 指向的是一个原始的对象
+		 */
 		Object bean = instanceWrapper.getWrappedInstance();
 		Class<?> beanType = instanceWrapper.getWrappedClass();
 		if (beanType != NullBean.class) {
@@ -614,6 +620,9 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		 * 在这个后置处理的postProcessAfterInitialization方法中对初始化后的Bean完成AOP代理。
 		 * 如果出现了循环依赖，那没有办法，只有给Bean先创建代理，但是没有出现循环依赖的情况下，
 		 * 设计之初就是让Bean在生命周期的最后一步完成代理而不是在实例化后就立马完成代理
+		 *
+		 * earlySingletonExposure 用于表示是否”提前暴露“原始对象的引用，用于解决循环依赖。对于单例 bean，该变量一般为 true
+		 *
  		 */
 
 		boolean earlySingletonExposure = (mbd.isSingleton() && this.allowCircularReferences &&
@@ -625,6 +634,12 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			}
 			/**
 			 * @note 添加到三级缓存
+			 * 获取原始对象的早期引用，在 getEarlyBeanReference 方法中，会执行 AOP 相关逻辑。
+			 * 若 bean 未被 AOP 拦截，getEarlyBeanReference 原样返回 bean，
+			 * 所以可以把
+			 * return getEarlyBeanReference(beanName, mbd, bean)
+			 * 等价于：
+			 * return bean;
 			 */
 			addSingletonFactory(beanName, () -> getEarlyBeanReference(beanName, mbd, bean));
 		}
@@ -1026,6 +1041,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	 *
 	 * @question 明明初始化的时候是A对象，那么Spring是在哪里将代理对象放入到容器中的呢？
 	 * @answer   当我们对A进行了AOP代理时，说明我们希望从容器中获取到的就是A代理后的对象而不是A本身，
+	 *
+	 * @note getBean 核心方法
 	 *
 	 *
 	 */
