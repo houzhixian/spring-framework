@@ -576,11 +576,13 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		if (instanceWrapper == null) {
 			/**
 			 * @note 创建 bean 对象，并将 bean 对象包裹在 BeanWrapper 对象中返回
+			 * @note 解决循环依赖核心逻辑-创建原始 bean 对象
 			 */
 			instanceWrapper = createBeanInstance(beanName, mbd, args);
 		}
 		/**
 		 * @note 从 BeanWrapper 对象中获取 bean 对象，这里的 bean 指向的是一个原始的对象
+		 * @note 假设 beanA 先被创建，创建后的原始对象为 BeanA@1234，上面代码中的 bean 变量指向就是这个对象。
 		 */
 		Object bean = instanceWrapper.getWrappedInstance();
 		Class<?> beanType = instanceWrapper.getWrappedClass();
@@ -642,6 +644,9 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			 * return getEarlyBeanReference(beanName, mbd, bean)
 			 * 等价于：
 			 * return bean;
+			 * @note 解决循环依赖核心逻辑-暴露早期引用
+			 * beanA 指向的原始对象创建好后，就开始把指向原始对象的引用通过 ObjectFactory 暴露出去
+			 * getEarlyBeanReference 方法的第三个参数 bean 指向的正是 createBeanInstance 方法创建出原始 bean 对象 BeanA@1234。
 			 */
 			addSingletonFactory(beanName, () -> getEarlyBeanReference(beanName, mbd, bean));
 		}
@@ -651,6 +656,9 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		try {
 			/**
 			 * @note 三级缓存添加后再开始属性注入 填充属性，解析依赖
+			 * @note 解决循环依赖核心逻辑-解析依赖
+			 * populateBean 用于向 beanA 这个原始对象中填充属性，当它检测到 beanA 依赖于 beanB 时，会首先去实例化 beanB。
+			 * beanB 在此方法处也会解析自己的依赖，当它检测到 beanA 这个依赖，于是调用 BeanFactry.getBean(“beanA”) 这个方法，从容器中获取 beanA。
 			 */
 			populateBean(beanName, mbd, instanceWrapper);
 			exposedObject = initializeBean(beanName, exposedObject, mbd);
@@ -674,6 +682,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			 * 在完成初始化后，Spring又调用了一次 getSingleton方法，这一次传入的参数又不一样了，false可以理解为禁用三级缓存
 			 * 在为B中注入A时已经将三级缓存中的工厂取出，并从工厂中获取到了一个对象放入到了二级缓存中，
 			 * 所以这里的这个getSingleton方法做的时间就是从二级缓存中获取到这个代理后的A对象
+			 * @note 解决循环依赖核心逻辑-获取早期引用
 			 */
 			Object earlySingletonReference = getSingleton(beanName, false);
 			if (earlySingletonReference != null) {
