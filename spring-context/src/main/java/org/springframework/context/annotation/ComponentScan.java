@@ -51,6 +51,7 @@ import org.springframework.core.type.filter.TypeFilter;
  * @author Sam Brannen
  * @since 3.1
  * @see Configuration
+ * @note @ComponentScan 解析过程 https://blog.csdn.net/luojinbai/article/details/85877956
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
