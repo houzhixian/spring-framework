@@ -114,6 +114,20 @@ public abstract class AopConfigUtils {
 		}
 	}
 
+	/**
+	 * @question @EnableAspectJAutoProxy 跟 @EnableTransactionManagement同时使用会有什么问题吗？
+	 * 不会有问题，它们最终都会调用registerOrEscalateApcAsRequired方法，只不过传入的参数不一样而已，
+	 * 一个是AnnotationAwareAspectJAutoProxyCreator,另一个是InfrastructureAdvisorAutoProxyCreator
+	 * InfrastructureAdvisorAutoProxyCreator跟AnnotationAwareAspectJAutoProxyCreator的优先级是如何定义的呢？
+	 * 实际上它们的优先级就是在APC_PRIORITY_LIST这个集合中的下标，下标越大优先级越高，
+	 * 所以AnnotationAwareAspectJAutoProxyCreator的优先级最高，所以AnnotationAwareAspectJAutoProxyCreator会覆盖
+	 * InfrastructureAdvisorAutoProxyCreator，那么这种覆盖会不会造成问题呢？
+	 * 不会的，这是因为InfrastructureAdvisorAutoProxyCreator只会使用容器内部定义的Advisor，
+	 * 但是AnnotationAwareAspectJAutoProxyCreator会使用所有实现了Advisor接口的通知，
+	 * 也就是说AnnotationAwareAspectJAutoProxyCreator的作用范围大于InfrastructureAdvisorAutoProxyCreator，因此这种覆盖是没有问题的
+	 *
+	 */
+
 	@Nullable
 	private static BeanDefinition registerOrEscalateApcAsRequired(
 			Class<?> cls, BeanDefinitionRegistry registry, @Nullable Object source) {
@@ -123,15 +137,27 @@ public abstract class AopConfigUtils {
 		if (registry.containsBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME)) {
 			BeanDefinition apcDefinition = registry.getBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME);
 			if (!cls.getName().equals(apcDefinition.getBeanClassName())) {
+				/**
+				 * @note 当前已经注册到容器中的Bean的优先级
+				 */
 				int currentPriority = findPriorityForClass(apcDefinition.getBeanClassName());
+				/**
+				 * @note 当前准备注册到容器中的Bean的优先级
+				 */
 				int requiredPriority = findPriorityForClass(cls);
+				/**
+				 * @note 谁的优先级大就注册谁，AnnotationAwareAspectJAutoProxyCreator是最大的
+				 * @note 所以AnnotationAwareAspectJAutoProxyCreator会覆盖别的Bean
+				 */
 				if (currentPriority < requiredPriority) {
 					apcDefinition.setBeanClassName(cls.getName());
 				}
 			}
 			return null;
 		}
-
+		/**
+		 * @note 注册bd
+		 */
 		RootBeanDefinition beanDefinition = new RootBeanDefinition(cls);
 		beanDefinition.setSource(source);
 		beanDefinition.getPropertyValues().add("order", Ordered.HIGHEST_PRECEDENCE);

@@ -155,6 +155,11 @@ import org.springframework.core.Ordered;
  * @see TransactionManagementConfigurationSelector
  * @see ProxyTransactionManagementConfiguration
  * @see org.springframework.transaction.aspectj.AspectJTransactionManagementConfiguration
+ *
+ * @note 此注解为 Spring 事务管理的入口
+ * @note 注意 @EnableTransactionManagement 的 proxyTargetClass 会影响 Spring 中所有通过自动代理生成的对象
+ * 如果将 proxyTargetClass 设置为 true，那么意味通过 @EnableAspectJAutoProxy 所生成的代理对象也会使用cglib进行代理
+ *
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
@@ -173,6 +178,8 @@ public @interface EnableTransactionManagement {
 	 * {@code @Async} annotation will be upgraded to subclass proxying at the same
 	 * time. This approach has no negative impact in practice unless one is explicitly
 	 * expecting one type of proxy vs another, e.g. in tests.
+	 *
+	 * @note 是否使用cglib代理，默认是jdk代理
 	 */
 	boolean proxyTargetClass() default false;
 
@@ -185,6 +192,8 @@ public @interface EnableTransactionManagement {
 	 * ignored since Spring's interceptor does not even kick in for such a runtime
 	 * scenario. For a more advanced mode of interception, consider switching this to
 	 * {@link AdviceMode#ASPECTJ}.
+	 *
+	 * @note 使用哪种代理模式，Spring AOP还是AspectJ
 	 */
 	AdviceMode mode() default AdviceMode.PROXY;
 
@@ -192,6 +201,10 @@ public @interface EnableTransactionManagement {
 	 * Indicate the ordering of the execution of the transaction advisor
 	 * when multiple advices are applied at a specific joinpoint.
 	 * <p>The default is {@link Ordered#LOWEST_PRECEDENCE}.
+	 *
+	 * @note 为了完成事务管理，会向容器中添加通知
+	 * 这个order属性代表了通知的执行优先级
+	 * 默认是最低优先级
 	 */
 	int order() default Ordered.LOWEST_PRECEDENCE;
 

@@ -54,21 +54,34 @@ public class AutoProxyRegistrar implements ImportBeanDefinitionRegistrar {
 	 * annotation it finds -- as long as it exposes the right {@code mode} and
 	 * {@code proxyTargetClass} attributes, the APC can be registered and configured all
 	 * the same.
+	 *
+	 * @note AnnotationMetadata，代表的是AutoProxyRegistrar的导入类的元信息
+	 * 既包含了类元信息，也包含了注解元信息
 	 */
 	@Override
 	public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
 		boolean candidateFound = false;
+		/**
+		 * 获取 @EnableTransactionManagement 所在配置类上的注解元信息
+		 */
 		Set<String> annTypes = importingClassMetadata.getAnnotationTypes();
+		// 遍历注解
 		for (String annType : annTypes) {
+			// 可以理解为将注解中的属性转换成一个map
 			AnnotationAttributes candidate = AnnotationConfigUtils.attributesFor(importingClassMetadata, annType);
 			if (candidate == null) {
 				continue;
 			}
+			// 直接从map中获取对应的属性
 			Object mode = candidate.get("mode");
 			Object proxyTargetClass = candidate.get("proxyTargetClass");
+			// mode，代理模型，一般都是SpringAOP
+			// proxyTargetClass,是否使用cglib代理
 			if (mode != null && proxyTargetClass != null && AdviceMode.class == mode.getClass() &&
 					Boolean.class == proxyTargetClass.getClass()) {
+				// 注解中存在这两个属性，并且属性类型符合要求，表示找到了合适的注解
 				candidateFound = true;
+				// 实际上会往容器中注册一个InfrastructureAdvisorAutoProxyCreator
 				if (mode == AdviceMode.PROXY) {
 					AopConfigUtils.registerAutoProxyCreatorIfNecessary(registry);
 					if ((Boolean) proxyTargetClass) {

@@ -53,7 +53,11 @@ public abstract class AbstractTransactionManagementConfiguration implements Impo
 	@Nullable
 	protected TransactionManager txManager;
 
-
+	/**
+	 * 	@note 这个方法就是获取@EnableTransactionManagement的属性
+	 *  @note importMetadata：就是@EnableTransactionManagement这个注解所在类的元信息
+	 * @param importMetadata
+	 */
 	@Override
 	public void setImportMetadata(AnnotationMetadata importMetadata) {
 		this.enableTx = AnnotationAttributes.fromMap(
