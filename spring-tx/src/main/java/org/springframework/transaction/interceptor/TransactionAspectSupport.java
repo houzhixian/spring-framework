@@ -84,6 +84,14 @@ import org.springframework.util.StringUtils;
  * @see #setTransactionManager
  * @see #setTransactionAttributes
  * @see #setTransactionAttributeSource
+ * @note 事务管理核心类
+ * @note 事务管理流程如下
+ * 获取事务属性------->tas.getTransactionAttribute
+ * 创建事务------------->createTransactionIfNecessary
+ * 执行业务逻辑------->invocation.proceedWithInvocation
+ * 异常时完成事务---->completeTransactionAfterThrowing
+ * 清除线程中绑定的事务信息----->cleanupTransactionInfo
+ * 提交事务------------->commitTransactionAfterReturning
  */
 public abstract class TransactionAspectSupport implements BeanFactoryAware, InitializingBean {
 
@@ -325,16 +333,23 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 	 * @param invocation the callback to use for proceeding with the target invocation
 	 * @return the return value of the method, if any
 	 * @throws Throwable propagated from the target invocation
+	 * @note 主要可以分为三段
+	 * 1.响应式事务管理
+	 * 2.标准事务管理
+	 * 3.通过回调实现事务管理
 	 */
 	@Nullable
 	protected Object invokeWithinTransaction(Method method, @Nullable Class<?> targetClass,
 			final InvocationCallback invocation) throws Throwable {
 
 		// If the transaction attribute is null, the method is non-transactional.
+		// @note 之前在配置类中注册了一个AnnotationTransactionAttributeSource
+		// @note 这里就是直接返回了之前注册的那个Bean，通过它去获取事务属性
 		TransactionAttributeSource tas = getTransactionAttributeSource();
+		// @note 解析@Transactional注解获取事务属性
 		final TransactionAttribute txAttr = (tas != null ? tas.getTransactionAttribute(method, targetClass) : null);
 		final TransactionManager tm = determineTransactionManager(txAttr);
-
+		// @note 响应式的事务管理
 		if (this.reactiveAdapterRegistry != null && tm instanceof ReactiveTransactionManager) {
 			ReactiveTransactionSupport txSupport = this.transactionSupportCache.computeIfAbsent(method, key -> {
 				if (KotlinDetector.isKotlinType(method.getDeclaringClass()) && KotlinDelegate.isSuspend(method)) {
@@ -352,26 +367,32 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 			return txSupport.invokeWithinTransaction(
 					method, targetClass, invocation, txAttr, (ReactiveTransactionManager) tm);
 		}
+		// @note 做了个强转PlatformTransactionManager
 
 		PlatformTransactionManager ptm = asPlatformTransactionManager(tm);
+		// @note 切点名称（类名+方法名）,会被作为事务的名称
 		final String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
 
 		if (txAttr == null || !(ptm instanceof CallbackPreferringPlatformTransactionManager)) {
 			// Standard transaction demarcation with getTransaction and commit/rollback calls.
+			// @note 创建事务
 			TransactionInfo txInfo = createTransactionIfNecessary(ptm, txAttr, joinpointIdentification);
 
 			Object retVal;
 			try {
 				// This is an around advice: Invoke the next interceptor in the chain.
 				// This will normally result in a target object being invoked.
+				// @note 这里执行真正的业务逻辑
 				retVal = invocation.proceedWithInvocation();
 			}
 			catch (Throwable ex) {
 				// target invocation exception
+				// @note 方法执行出现异常，在异常情况下完成事务
 				completeTransactionAfterThrowing(txInfo, ex);
 				throw ex;
 			}
 			finally {
+				// @note 清除线程中的事务信息
 				cleanupTransactionInfo(txInfo);
 			}
 
@@ -382,10 +403,12 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 					retVal = VavrDelegate.evaluateTryFailure(retVal, txAttr, status);
 				}
 			}
-
+			// @note 提交事务
 			commitTransactionAfterReturning(txInfo);
 			return retVal;
 		}
+
+		// @note 回调实现事务管理相关代码
 
 		else {
 			Object result;
@@ -862,63 +885,64 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 			String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
 
 			// Optimize for Mono
-			if (Mono.class.isAssignableFrom(method.getReturnType())) {
-				return TransactionContextManager.currentContext().flatMap(context ->
-						createTransactionIfNecessary(rtm, txAttr, joinpointIdentification).flatMap(it -> {
-							try {
-								// Need re-wrapping until we get hold of the exception through usingWhen.
-								return Mono.<Object, ReactiveTransactionInfo>usingWhen(
-										Mono.just(it),
-										txInfo -> {
-											try {
-												return (Mono<?>) invocation.proceedWithInvocation();
-											}
-											catch (Throwable ex) {
-												return Mono.error(ex);
-											}
-										},
-										this::commitTransactionAfterReturning,
-										(txInfo, err) -> Mono.empty(),
-										this::rollbackTransactionOnCancel)
-										.onErrorResume(ex ->
-												completeTransactionAfterThrowing(it, ex).then(Mono.error(ex)));
-							}
-							catch (Throwable ex) {
-								// target invocation exception
-								return completeTransactionAfterThrowing(it, ex).then(Mono.error(ex));
-							}
-						})).subscriberContext(TransactionContextManager.getOrCreateContext())
-						.subscriberContext(TransactionContextManager.getOrCreateContextHolder());
-			}
+//			if (Mono.class.isAssignableFrom(method.getReturnType())) {
+//				return TransactionContextManager.currentContext().flatMap(context ->
+//						createTransactionIfNecessary(rtm, txAttr, joinpointIdentification).flatMap(it -> {
+//							try {
+//								// Need re-wrapping until we get hold of the exception through usingWhen.
+//								return Mono.<Object, ReactiveTransactionInfo>usingWhen(
+//										Mono.just(it),
+//										txInfo -> {
+//											try {
+//												return (Mono<?>) invocation.proceedWithInvocation();
+//											}
+//											catch (Throwable ex) {
+//												return Mono.error(ex);
+//											}
+//										},
+//										this::commitTransactionAfterReturning,
+//										(txInfo, err) -> Mono.empty(),
+//										this::rollbackTransactionOnCancel)
+//										.onErrorResume(ex ->
+//												completeTransactionAfterThrowing(it, ex).then(Mono.error(ex)));
+//							}
+//							catch (Throwable ex) {
+//								// target invocation exception
+//								return completeTransactionAfterThrowing(it, ex).then(Mono.error(ex));
+//							}
+//						})).subscriberContext(TransactionContextManager.getOrCreateContext())
+//						.subscriberContext(TransactionContextManager.getOrCreateContextHolder());
+//			}
 
 			// Any other reactive type, typically a Flux
-			return this.adapter.fromPublisher(TransactionContextManager.currentContext().flatMapMany(context ->
-					createTransactionIfNecessary(rtm, txAttr, joinpointIdentification).flatMapMany(it -> {
-						try {
-							// Need re-wrapping until we get hold of the exception through usingWhen.
-							return Flux
-									.usingWhen(
-											Mono.just(it),
-											txInfo -> {
-												try {
-													return this.adapter.toPublisher(invocation.proceedWithInvocation());
-												}
-												catch (Throwable ex) {
-													return Mono.error(ex);
-												}
-											},
-											this::commitTransactionAfterReturning,
-											(txInfo, ex) -> Mono.empty(),
-											this::rollbackTransactionOnCancel)
-									.onErrorResume(ex ->
-											completeTransactionAfterThrowing(it, ex).then(Mono.error(ex)));
-						}
-						catch (Throwable ex) {
-							// target invocation exception
-							return completeTransactionAfterThrowing(it, ex).then(Mono.error(ex));
-						}
-					})).subscriberContext(TransactionContextManager.getOrCreateContext())
-					.subscriberContext(TransactionContextManager.getOrCreateContextHolder()));
+//			return this.adapter.fromPublisher(TransactionContextManager.currentContext().flatMapMany(context ->
+//					createTransactionIfNecessary(rtm, txAttr, joinpointIdentification).flatMapMany(it -> {
+//						try {
+//							// Need re-wrapping until we get hold of the exception through usingWhen.
+//							return Flux
+//									.usingWhen(
+//											Mono.just(it),
+//											txInfo -> {
+//												try {
+//													return this.adapter.toPublisher(invocation.proceedWithInvocation());
+//												}
+//												catch (Throwable ex) {
+//													return Mono.error(ex);
+//												}
+//											},
+//											this::commitTransactionAfterReturning,
+//											(txInfo, ex) -> Mono.empty(),
+//											this::rollbackTransactionOnCancel)
+//									.onErrorResume(ex ->
+//											completeTransactionAfterThrowing(it, ex).then(Mono.error(ex)));
+//						}
+//						catch (Throwable ex) {
+//							// target invocation exception
+//							return completeTransactionAfterThrowing(it, ex).then(Mono.error(ex));
+//						}
+//					})).subscriberContext(TransactionContextManager.getOrCreateContext())
+//					.subscriberContext(TransactionContextManager.getOrCreateContextHolder()));
+			return null;
 		}
 
 		@SuppressWarnings("serial")
