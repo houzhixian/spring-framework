@@ -34,11 +34,23 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
  * @since 3.1
  * @see EnableTransactionManagement
  * @see TransactionManagementConfigurationSelector
+ * @note 事务相关核心类
+ * @note proxyBeanMethods=false，意味着不对配置类生成代理对象
+ * @note 实现事务管理的核心就是SpringAOP，而完成SpringAOP的核心就是通知（Advice），通知的核心就是拦截器
+ *
  */
 @Configuration(proxyBeanMethods = false)
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 public class ProxyTransactionManagementConfiguration extends AbstractTransactionManagementConfiguration {
-
+	/**
+	 *
+	 * @note 注册了一个BeanFactoryTransactionAttributeSourceAdvisor
+	 * advisor就是一个绑定了切点的通知
+	 * 通知就是 TransactionInterceptor
+	 * 切点会通过 TransactionAttributeSource 去解析 @Transacational 注解
+	 * 只会对有这个注解的方法进行拦截
+	 * BeanDefinition的角色是一个基础设施类
+	 */
 	@Bean(name = TransactionManagementConfigUtils.TRANSACTION_ADVISOR_BEAN_NAME)
 	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 	public BeanFactoryTransactionAttributeSourceAdvisor transactionAdvisor(
@@ -53,12 +65,23 @@ public class ProxyTransactionManagementConfiguration extends AbstractTransaction
 		return advisor;
 	}
 
+	/**
+	 *
+	 * @note 注册一个AnnotationTransactionAttributeSource
+	 * 这个类的主要作用是用来解析@Transacational注解
+	 *
+	 */
 	@Bean
 	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 	public TransactionAttributeSource transactionAttributeSource() {
 		return new AnnotationTransactionAttributeSource();
 	}
-
+	/**
+	 *
+	 * @note 事务是通过AOP实现的，AOP的核心就是拦截器
+	 * 这里就是注册了实现事务需要的拦截器
+	 *
+	 */
 	@Bean
 	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 	public TransactionInterceptor transactionInterceptor(TransactionAttributeSource transactionAttributeSource) {
