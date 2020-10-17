@@ -98,6 +98,11 @@ public abstract class AbstractFallbackTransactionAttributeSource
 	 * @param targetClass the target class for this invocation (may be {@code null})
 	 * @return a TransactionAttribute for this method, or {@code null} if the method
 	 * is not transactional
+	 * @note 1、获取事务属性 - spring 事务管理核心方法
+	 * 获取事务对应的属性,实际上返回一个AnnotationTransactionAttributeSource
+	 * 之后再调用AnnotationTransactionAttributeSource的getTransactionAttribute
+	 * getTransactionAttribute:先从拦截的方法上找@Transactional注解
+	 * 如果方法上没有的话，再从方法所在的类上找，如果类上还没有的话尝试从接口或者父类上找
 	 */
 	@Override
 	@Nullable
@@ -107,6 +112,7 @@ public abstract class AbstractFallbackTransactionAttributeSource
 		}
 
 		// First, see if we have a cached value.
+		//@note 在缓存中查找
 		Object cacheKey = getCacheKey(method, targetClass);
 		TransactionAttribute cached = this.attributeCache.get(cacheKey);
 		if (cached != null) {
@@ -121,8 +127,12 @@ public abstract class AbstractFallbackTransactionAttributeSource
 		}
 		else {
 			// We need to work it out.
+			//@note 这里真正的去执行解析
 			TransactionAttribute txAttr = computeTransactionAttribute(method, targetClass);
 			// Put it in the cache.
+			/**
+			 * @note 缓存解析的结果，如果事务属性为null,也放入一个标志代表这个方法不需要进行事务管理
+			 */
 			if (txAttr == null) {
 				this.attributeCache.put(cacheKey, NULL_TRANSACTION_ATTRIBUTE);
 			}
@@ -160,30 +170,37 @@ public abstract class AbstractFallbackTransactionAttributeSource
 	 * <p>As of 4.1.8, this method can be overridden.
 	 * @since 4.1.8
 	 * @see #getTransactionAttribute
+	 * @note 真正解析 @Transactional 的地方
 	 */
 	@Nullable
 	protected TransactionAttribute computeTransactionAttribute(Method method, @Nullable Class<?> targetClass) {
 		// Don't allow no-public methods as required.
+		// @note 默认情况下allowPublicMethodsOnly为true
+		// @note 这意味着@Transactional如果放在非public方法上不会生效
 		if (allowPublicMethodsOnly() && !Modifier.isPublic(method.getModifiers())) {
 			return null;
 		}
 
 		// The method may be on an interface, but we need attributes from the target class.
 		// If the target class is null, the method will be unchanged.
+		// @note method是接口中的方法
+		// @note specificMethod是具体实现类的方法
 		Method specificMethod = AopUtils.getMostSpecificMethod(method, targetClass);
 
 		// First try is the method in the target class.
+		//@note 先在目标类方法上找
 		TransactionAttribute txAttr = findTransactionAttribute(specificMethod);
 		if (txAttr != null) {
 			return txAttr;
 		}
 
 		// Second try is the transaction attribute on the target class.
+		//@note 再在目标类上找
 		txAttr = findTransactionAttribute(specificMethod.getDeclaringClass());
 		if (txAttr != null && ClassUtils.isUserLevelMethod(method)) {
 			return txAttr;
 		}
-
+		//@note 降级到接口跟接口中的方法上找这个注解
 		if (specificMethod != method) {
 			// Fallback is to look at the original method.
 			txAttr = findTransactionAttribute(method);
